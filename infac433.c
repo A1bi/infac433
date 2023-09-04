@@ -3,7 +3,7 @@
 #include <lgpio.h>
 #include <unistd.h>
 
-#include "crc4.c"
+#include "crc4.h"
 
 #define PIN_IN 24
 

@@ -9,6 +9,8 @@
     (at your option) any later version.
 */
 
+#include "crc4.h"
+
 uint8_t crc4(uint8_t const message[], unsigned nBytes, uint8_t polynomial, uint8_t init)
 {
   unsigned remainder = init << 4; // LSBs are unused
