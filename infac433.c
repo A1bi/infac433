@@ -1,3 +1,5 @@
+#include <stdio.h>
+#include <stdlib.h>
 #include <signal.h>
 #include <lgpio.h>
 #include <unistd.h>
@@ -21,6 +23,13 @@ static void setup_handlers() {
   sigaction(SIGTERM, &sa, NULL);
 }
 
+void infac_print_packet(infac_packet *packet) {
+  printf("temperature: %.1f C\n", packet->temperature);
+  printf("humidity: %d %%\n", packet->humidity);
+  printf("battery low: %d\n", packet->battery_low);
+  printf("channel: %d\n", packet->channel);
+}
+
 int main(int argc, char *argv[]) {
   setup_handlers();
 
@@ -34,7 +43,12 @@ int main(int argc, char *argv[]) {
     val = lgGpioRead(gpio_handle, PIN_IN);
     if (val != edge) {
       edge = val;
-      infac_decoder_process_pulse(val);
+
+      infac_packet *packet = infac_decoder_process_pulse(val);
+      if (packet) {
+        infac_print_packet(packet);
+        free(packet);
+      }
     }
     usleep(100);
   }

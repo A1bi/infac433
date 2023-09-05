@@ -1,56 +1,59 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <sys/time.h>
 
 #include "decoder.h"
 #include "crc4.h"
 
-enum InfacPacketReceiveState {
+enum infac_packet_receive_state {
   INFAC_RECEIVE_IDLE,
   INFAC_RECEIVE_PREAMBLE,
   INFAC_RECEIVE_SYNC,
   INFAC_RECEIVE_DATA
 };
 
-enum InfacPacketReceiveState current_state = INFAC_RECEIVE_IDLE;
+enum infac_packet_receive_state current_state = INFAC_RECEIVE_IDLE;
 uint64_t last_timestamp = 0;
 
 struct timeval tv;
 uint8_t state_bits = 0;
-uint8_t packet[5];
+uint8_t raw_packet[5];
 
-static uint8_t infac_decoder_crc_check_packet() {
-  uint8_t crc_received = packet[1] >> 4;
+static bool infac_decoder_crc_check_packet() {
+  uint8_t crc_received = raw_packet[1] >> 4;
   // channel bits are moved to the CRC position since only four bytes are included
-  packet[1] = (packet[1] & 0x0f) | ((packet[4] & 0x0f) << 4);
-  uint8_t crc_calculated = crc4(packet, 4, 0x13, 0);
-  crc_calculated ^= packet[4] >> 4;
+  raw_packet[1] = (raw_packet[1] & 0x0f) | ((raw_packet[4] & 0x0f) << 4);
+  uint8_t crc_calculated = crc4(raw_packet, 4, 0x13, 0);
+  crc_calculated ^= raw_packet[4] >> 4;
 
   return crc_received == crc_calculated;
 }
 
-static void infac_decoder_process_packet() {
+static infac_packet *infac_decoder_process_packet() {
   if (!infac_decoder_crc_check_packet()) {
     printf("CRC check failed\n");
-    return;
+    return 0;
   }
 
-  uint8_t humidity = (packet[3] & 0xf) * 10 + (packet[4] >> 4);
-  uint16_t temperature_raw = ((uint16_t)packet[2] << 4) | (packet[3] >> 4);
-  double temperature_f = temperature_raw / 10.0 - 90;
-  double temperature_c = (temperature_f - 32) * 5 / 9;
+  infac_packet *packet = malloc(sizeof(infac_packet));
 
-  printf("temperature: %.1f C\n", temperature_c);
-  printf("humidity: %d %%\n", humidity);
-  printf("battery low: %d\n", (packet[1] & 0x4) > 0);
-  printf("channel: %d\n", packet[4] & 0x3);
+  uint16_t temperature_raw = ((uint16_t)raw_packet[2] << 4) | (raw_packet[3] >> 4);
+  double temperature_f = temperature_raw / 10.0 - 90;
+  packet->temperature = (temperature_f - 32) * 5 / 9;
+
+  packet->humidity = (raw_packet[3] & 0xf) * 10 + (raw_packet[4] >> 4);
+  packet->battery_low = (raw_packet[1] & 0x4) > 0;
+  packet->channel = raw_packet[4] & 0x3;
+
+  return packet;
 }
 
-void infac_decoder_process_pulse(uint8_t pulse) {
-  gettimeofday(&tv,NULL);
+infac_packet *infac_decoder_process_pulse(uint8_t pulse) {
+  gettimeofday(&tv, NULL);
   uint64_t timestamp = tv.tv_sec * (uint64_t)1000000 + tv.tv_usec;
   uint64_t diff = timestamp - last_timestamp;
 
-  if (diff < 150) return;
+  if (diff < 150) return 0;
 
   last_timestamp = timestamp;
   uint8_t past_pulse = !pulse;
@@ -83,15 +86,17 @@ void infac_decoder_process_pulse(uint8_t pulse) {
       if (pulse == 1) {
         uint8_t current_byte = state_bits / 8;
         uint8_t current_bit = 7 - state_bits % 8;
-        packet[current_byte] &= ~(1 << current_bit);
+        raw_packet[current_byte] &= ~(1 << current_bit);
         if (diff > 3250) {
-          packet[current_byte] |= (1 << current_bit);
+          raw_packet[current_byte] |= (1 << current_bit);
         }
         if (++state_bits >= 40) {
-          infac_decoder_process_packet();
           current_state = INFAC_RECEIVE_IDLE;
+          return infac_decoder_process_packet();
         }
       }
       break;
   }
+
+  return 0;
 }
