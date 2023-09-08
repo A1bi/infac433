@@ -1,10 +1,10 @@
-#include <stdio.h>
 #include <stdlib.h>
 #include <signal.h>
 #include <lgpio.h>
 #include <unistd.h>
 
 #include "decoder.h"
+#include "utils.h"
 
 #define PIN_IN 24
 
@@ -24,13 +24,13 @@ static void setup_handlers() {
 }
 
 void infac_print_packet(infac_packet *packet) {
-  printf("temperature: %.1f C\n", packet->temperature);
-  printf("humidity: %d %%\n", packet->humidity);
-  printf("battery low: %d\n", packet->battery_low);
-  printf("channel: %d\n", packet->channel);
+  infac_log_info("channel: %d | temperature: %.1f C | humidity: %d %% | battery low: %d",
+                 packet->channel, packet->temperature, packet->humidity, packet->battery_low);
 }
 
 int main(int argc, char *argv[]) {
+  infac_set_log_level(INFAC_LOG_DEBUG);
+
   setup_handlers();
 
   uint8_t gpio_handle = lgGpiochipOpen(0);

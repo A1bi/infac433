@@ -1,18 +1,18 @@
-#include <stdio.h>
 #include <stdlib.h>
 #include <sys/time.h>
 
 #include "decoder.h"
 #include "crc4.h"
+#include "utils.h"
 
-enum infac_packet_receive_state {
+typedef enum infac_packet_receive_state {
   INFAC_RECEIVE_IDLE,
   INFAC_RECEIVE_PREAMBLE,
   INFAC_RECEIVE_SYNC,
   INFAC_RECEIVE_DATA
-};
+} infac_packet_receive_state;
 
-enum infac_packet_receive_state current_state = INFAC_RECEIVE_IDLE;
+infac_packet_receive_state current_state = INFAC_RECEIVE_IDLE;
 uint64_t last_timestamp = 0;
 
 struct timeval tv;
@@ -31,7 +31,7 @@ static bool infac_decoder_crc_check_packet() {
 
 static infac_packet *infac_decoder_process_packet() {
   if (!infac_decoder_crc_check_packet()) {
-    printf("CRC check failed\n");
+    infac_log_debug("CRC check failed");
     return 0;
   }
 
@@ -77,9 +77,11 @@ infac_packet *infac_decoder_process_pulse(uint8_t pulse) {
     case INFAC_RECEIVE_SYNC:
       if (past_pulse == 0 && diff >= 7000) {
         current_state = INFAC_RECEIVE_DATA;
+        infac_log_debug("synced");
         state_bits = 0;
       } else if ((past_pulse == 1 && diff < 400) || (past_pulse == 0 && diff < 7000)) {
         current_state = INFAC_RECEIVE_IDLE;
+        infac_log_debug("sync failed");
       }
       break;
     case INFAC_RECEIVE_DATA:
@@ -92,6 +94,7 @@ infac_packet *infac_decoder_process_pulse(uint8_t pulse) {
         }
         if (++state_bits >= 40) {
           current_state = INFAC_RECEIVE_IDLE;
+          infac_log_debug("data complete");
           return infac_decoder_process_packet();
         }
       }
