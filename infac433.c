@@ -6,11 +6,15 @@
 #include <string.h>
 
 #include "decoder.h"
+#include "mqtt_pub.h"
 #include "utils.h"
 
 #define DEFAULT_INPUT_PIN 24
 
 uint8_t aborted = 0;
+const char *mqtt_device_id = 0;
+const char *mqtt_broker_host = 0;
+const char *mqtt_broker_port = 0;
 
 static void exit_handler(int signum) {
   aborted = 1;
@@ -30,13 +34,21 @@ void infac_print_packet(infac_packet *packet) {
                  packet->channel, packet->temperature, packet->humidity, packet->battery_low);
 }
 
+void infac_publish_packet(infac_packet *packet) {
+  char data[6];
+  snprintf(data, sizeof(data), "%.1f", packet->temperature);
+  infac_mqtt_publish(mqtt_device_id, packet->channel, "temperature", data);
+  snprintf(data, sizeof(data), "%d", packet->humidity);
+  infac_mqtt_publish(mqtt_device_id, packet->channel, "humidity", data);
+}
+
 int main(int argc, char *argv[]) {
   uint8_t input_pin = DEFAULT_INPUT_PIN;
   uint8_t filtered_channels[3];
   uint8_t filtered_channels_count = 0;
 
   int8_t option;
-  while ((option = getopt(argc, argv, "p:c:d")) != -1) {
+  while ((option = getopt(argc, argv, "p:c:i:d")) != -1) {
     switch (option) {
       case 'p':
         input_pin = atoi(optarg);
@@ -58,6 +70,10 @@ int main(int argc, char *argv[]) {
         break;
       }
 
+      case 'i':
+        mqtt_device_id = optarg;
+        break;
+
       case 'd':
         infac_set_log_level(INFAC_LOG_DEBUG);
         break;
@@ -67,7 +83,22 @@ int main(int argc, char *argv[]) {
     }
   }
 
+  if (optind < argc) {
+    mqtt_broker_host = argv[optind];
+    if (++optind < argc) mqtt_broker_port = argv[optind];
+  } else {
+    fprintf(stderr, "Please specify an MQTT broker host.\n");
+    return 1;
+  }
+
+  if (!mqtt_device_id) {
+    fprintf(stderr, "Device identifier must be specified using the -i option.\n");
+    return 1;
+  }
+
   setup_handlers();
+
+  infac_mqtt_connect(mqtt_broker_host, mqtt_broker_port);
 
   uint8_t gpio_handle = lgGpiochipOpen(0);
   uint8_t edge = 0;
@@ -93,6 +124,7 @@ int main(int argc, char *argv[]) {
           infac_log_debug("dropping packet because of specified channel filter");
         } else {
           infac_print_packet(packet);
+          infac_publish_packet(packet);
         }
         free(packet);
       }
@@ -101,6 +133,8 @@ int main(int argc, char *argv[]) {
   }
 
   lgGpioFree(gpio_handle, input_pin);
+
+  infac_mqtt_disconnect();
 
   return 0;
 }

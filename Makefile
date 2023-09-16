@@ -1,5 +1,5 @@
-CFLAGS = -llgpio -Wall
-SOURCE = $(wildcard *.c)
+CFLAGS = -llgpio -lpthread -Wall -IMQTT-C/include
+SOURCE = $(wildcard *.c) $(wildcard MQTT-C/src/*.c)
 OBJECTS = $(SOURCE:.c=.o)
 BUILD_DIR = build
 BIN_NAME = infac433
