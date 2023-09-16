@@ -5,7 +5,7 @@
 #include "utils.h"
 
 static const char *log_level_strings[] = {
-  "DEBUG", "INFO"
+  "ERROR", "INFO", "DEBUG"
 };
 
 static infac_log_level current_log_level = INFAC_LOG_INFO;
@@ -15,7 +15,7 @@ void infac_set_log_level(infac_log_level level) {
 }
 
 void infac_log(infac_log_level level, const char *fmt, ...) {
-  if (level < current_log_level) return;
+  if (level > current_log_level) return;
 
   time_t timer = time(NULL);
   struct tm *time_info = localtime(&timer);
@@ -28,5 +28,7 @@ void infac_log(infac_log_level level, const char *fmt, ...) {
   vsnprintf(message_buf, sizeof(message_buf), fmt, arguments);
   va_end(arguments);
 
-  printf("%s %s: %s\n", time_buf, log_level_strings[level], message_buf);
+  FILE *output = (level == INFAC_LOG_ERROR) ? stderr : stdout;
+
+  fprintf(output, "%s %s: %s\n", time_buf, log_level_strings[level], message_buf);
 }

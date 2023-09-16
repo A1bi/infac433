@@ -23,7 +23,7 @@ static void *infac_mqtt_client_refresher(void* _client) {
   while (1) {
     enum MQTTErrors error = mqtt_sync(&client);
     if (error != MQTT_OK) {
-      infac_log_info("failed to sync with MQTT broker: %s", mqtt_error_str(error));
+      infac_log_error("failed to sync with MQTT broker: %s", mqtt_error_str(error));
     }
     usleep(100000U);
   }
@@ -42,19 +42,19 @@ static int infac_mqtt_open_socket(const char* addr, const char* port) {
 
   result = getaddrinfo(addr, port, &hints, &servinfo);
   if (result != 0) {
-    infac_log_info("failed to open socket (getaddrinfo): %s", gai_strerror(result));
+    infac_log_error("failed to open socket (getaddrinfo): %s", gai_strerror(result));
     return -1;
   }
 
   sockfd = socket(servinfo->ai_family, servinfo->ai_socktype, servinfo->ai_protocol);
   if (sockfd == -1) {
-    infac_log_info("failed to open socket");
+    infac_log_error("failed to open socket");
     return -1;
   }
 
   result = connect(sockfd, servinfo->ai_addr, servinfo->ai_addrlen);
   if (result == -1) {
-    infac_log_info("failed to connect");
+    infac_log_error("failed to connect to host");
     close(sockfd);
     sockfd = -1;
   }
@@ -80,12 +80,12 @@ void infac_mqtt_connect(const char* addr, const char* port) {
   mqtt_connect(&client, NULL, NULL, NULL, 0, NULL, NULL, MQTT_CONNECT_CLEAN_SESSION, 400);
 
   if (client.error != MQTT_OK) {
-    infac_log_info("failed to connect to MQTT broker: %s", mqtt_error_str(client.error));
+    infac_log_error("failed to connect to MQTT broker: %s", mqtt_error_str(client.error));
     return;
   }
 
   if (pthread_create(&refresh_thread, NULL, infac_mqtt_client_refresher, &client)) {
-    infac_log_info("failed to start MQTT thread");
+    infac_log_error("failed to start MQTT thread");
     return;
   }
 
@@ -110,7 +110,7 @@ void infac_mqtt_publish(const char* device_id, uint8_t channel, const char* data
   mqtt_publish(&client, topic, data, strlen(data) + 1, MQTT_PUBLISH_QOS_0);
 
   if (client.error != MQTT_OK) {
-    infac_log_info("failed to publish to MQTT topic: %s", mqtt_error_str(client.error));
+    infac_log_error("failed to publish to MQTT topic: %s", mqtt_error_str(client.error));
     return;
   }
 

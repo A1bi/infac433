@@ -61,7 +61,7 @@ int main(int argc, char *argv[]) {
 
           uint8_t channel_i = atoi(channel);
           if (channel_i < 1 || channel_i > 3) {
-            fprintf(stderr, "Channels must be in the range of 1 to 3.\n");
+            infac_log_error("Channels must be in the range of 1 to 3.");
             return 1;
           }
           filtered_channels[filtered_channels_count++] = channel_i;
@@ -87,12 +87,12 @@ int main(int argc, char *argv[]) {
     mqtt_broker_host = argv[optind];
     if (++optind < argc) mqtt_broker_port = argv[optind];
   } else {
-    fprintf(stderr, "Please specify an MQTT broker host.\n");
+    infac_log_error("MQTT broker host must be specified.");
     return 1;
   }
 
   if (!mqtt_device_id) {
-    fprintf(stderr, "Device identifier must be specified using the -i option.\n");
+    infac_log_error("Device identifier must be specified using the -i option.");
     return 1;
   }
 
