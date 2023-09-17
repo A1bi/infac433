@@ -34,14 +34,6 @@ void infac_print_packet(infac_packet *packet) {
                  packet->channel, packet->temperature, packet->humidity, packet->battery_low);
 }
 
-void infac_publish_packet(infac_packet *packet) {
-  char data[6];
-  snprintf(data, sizeof(data), "%.1f", packet->temperature);
-  infac_mqtt_publish(mqtt_device_id, packet->channel, "temperature", data);
-  snprintf(data, sizeof(data), "%d", packet->humidity);
-  infac_mqtt_publish(mqtt_device_id, packet->channel, "humidity", data);
-}
-
 int main(int argc, char *argv[]) {
   uint8_t input_pin = DEFAULT_INPUT_PIN;
   uint8_t filtered_channels[3];
@@ -124,7 +116,7 @@ int main(int argc, char *argv[]) {
           infac_log_debug("dropping packet because of specified channel filter");
         } else {
           infac_print_packet(packet);
-          infac_publish_packet(packet);
+          infac_mqtt_publish_packet(mqtt_device_id, packet);
         }
         free(packet);
       }

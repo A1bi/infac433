@@ -6,10 +6,12 @@
 #include <unistd.h>
 #include "mqtt.h"
 
+#include "decoder.h"
 #include "utils.h"
 
 #define MQTT_DEFAULT_PORT "1883"
-#define MQTT_TOPIC_FORMAT "infac433/%s/%d/%s"
+#define MQTT_TOPIC_FORMAT "infac433/%s/%d"
+#define MQTT_MESSAGE_JSON_FORMAT "{\"channel\":%d,\"temperature\":%.1f,\"humidity\":%d,\"battery_low\":%s}"
 
 struct mqtt_client client;
 uint8_t sendbuf[2048];
@@ -103,14 +105,18 @@ void infac_mqtt_disconnect() {
   infac_log_debug("disconnected from MQTT broker");
 }
 
-void infac_mqtt_publish(const char* device_id, uint8_t channel, const char* datapoint, const char* data) {
-  char topic[50];
-  snprintf(topic, sizeof(topic), MQTT_TOPIC_FORMAT, device_id, channel, datapoint);
+void infac_mqtt_publish_packet(const char* device_id, infac_packet *packet) {
+  char topic[30];
+  snprintf(topic, sizeof(topic), MQTT_TOPIC_FORMAT, device_id, packet->channel);
 
-  mqtt_publish(&client, topic, data, strlen(data) + 1, MQTT_PUBLISH_QOS_0);
+  char data[100];
+  size_t size = snprintf(data, sizeof(data), MQTT_MESSAGE_JSON_FORMAT,
+                         packet->channel, packet->temperature, packet->humidity, packet->battery_low ? "true" : "false");
+
+  mqtt_publish(&client, topic, data, size, MQTT_PUBLISH_QOS_0);
 
   if (client.error != MQTT_OK) {
-    infac_log_error("failed to publish to MQTT topic: %s", mqtt_error_str(client.error));
+    infac_log_error("failed to publish packet to MQTT topic: %s", mqtt_error_str(client.error));
     return;
   }
 
