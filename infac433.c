@@ -10,8 +10,11 @@
 #include "utils.h"
 
 #define DEFAULT_INPUT_PIN 24
+#define DEFAULT_SLEEP_SECONDS_AFTER_RECEIVED 60
+#define MAX_CHANNELS 3
 
 uint8_t aborted = 0;
+uint16_t sleep_seconds_after_received = DEFAULT_SLEEP_SECONDS_AFTER_RECEIVED;
 const char *mqtt_device_id = 0;
 const char *mqtt_broker_host = 0;
 const char *mqtt_broker_port = 0;
@@ -36,27 +39,34 @@ void infac_print_packet(infac_packet *packet) {
 
 int main(int argc, char *argv[]) {
   uint8_t input_pin = DEFAULT_INPUT_PIN;
-  uint8_t filtered_channels[3];
-  uint8_t filtered_channels_count = 0;
+  bool channel_filtered[MAX_CHANNELS];
+  bool packet_received_on_channel[MAX_CHANNELS];
+
+  for (int i = 0; i < MAX_CHANNELS; ++i) {
+    channel_filtered[i] = true;
+    packet_received_on_channel[i] = false;
+  }
 
   int8_t option;
-  while ((option = getopt(argc, argv, "p:c:i:d")) != -1) {
+  while ((option = getopt(argc, argv, "p:c:i:s:d")) != -1) {
     switch (option) {
       case 'p':
         input_pin = atoi(optarg);
         break;
 
       case 'c': {
+        for (int i = 0; i < MAX_CHANNELS; ++i) {
+          channel_filtered[i] = false;
+        }
+
         char *channel = strtok(optarg, ",");
         while (channel != NULL) {
-          if (filtered_channels_count >= sizeof(filtered_channels)) break;
-
           uint8_t channel_i = atoi(channel);
-          if (channel_i < 1 || channel_i > 3) {
-            infac_log_error("Channels must be in the range of 1 to 3.");
+          if (channel_i < 1 || channel_i > MAX_CHANNELS) {
+            infac_log_error("Channels must be in the range of 1 to %d.", MAX_CHANNELS);
             return 1;
           }
-          filtered_channels[filtered_channels_count++] = channel_i;
+          channel_filtered[channel_i - 1] = true;
           channel = strtok(NULL, ",");
         }
         break;
@@ -64,6 +74,10 @@ int main(int argc, char *argv[]) {
 
       case 'i':
         mqtt_device_id = optarg;
+        break;
+
+      case 's':
+        sleep_seconds_after_received = atoi(optarg);
         break;
 
       case 'd':
@@ -105,18 +119,27 @@ int main(int argc, char *argv[]) {
 
       infac_packet *packet = infac_decoder_process_pulse(val);
       if (packet) {
-        bool drop_packet = filtered_channels_count > 0;
-        for (int i = 0; i < filtered_channels_count; ++i) {
-          if (filtered_channels[i] == packet->channel) {
-            drop_packet = false;
-            break;
-          }
-        }
-        if (drop_packet) {
-          infac_log_debug("dropping packet because of specified channel filter");
-        } else {
+        if (channel_filtered[packet->channel - 1]) {
           infac_print_packet(packet);
           infac_mqtt_publish_packet(mqtt_device_id, packet);
+          packet_received_on_channel[packet->channel - 1] = true;
+
+          bool all_packets_received = true;
+          for (int i = 0; i < MAX_CHANNELS; ++i) {
+            if (!packet_received_on_channel[i] && channel_filtered[i]) {
+              all_packets_received = false;
+              break;
+            }
+          }
+
+          if (all_packets_received) {
+            infac_log_debug("packets received for all filtered channels. pausing decoder for %d seconds...", sleep_seconds_after_received);
+            sleep(sleep_seconds_after_received);
+            infac_log_debug("resuming decoder");
+          }
+
+        } else {
+          infac_log_debug("dropping packet because of specified channel filter");
         }
         free(packet);
       }
